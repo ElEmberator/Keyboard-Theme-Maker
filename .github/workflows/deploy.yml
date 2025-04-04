@@ -1,0 +1,56 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      theme_name:
+        description: 'Theme name for APK'
+        required: true
+      theme_config:
+        description: 'Base64 encoded theme config'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Generate theme files
+      run: |
+        mkdir -p app/src/main/res
+        echo "${{ inputs.theme_config }}" | base64 --decode > app/src/main/res/theme_config.json
+        python scripts/generate_theme.py
+        
+    - name: Build APK
+      run: ./gradlew assembleRelease
+      
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ inputs.theme_name }}_keyboard.apk
+        path: app/build/outputs/apk/release/app-release.apk
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/download-artifact@v3
+      with:
+        name: ${{ inputs.theme_name }}_keyboard.apk
+        path: docs/
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs
+        keep_files: true
